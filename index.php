@@ -175,6 +175,14 @@ if ($action === 'delete_product') {
         header("Location: index.php?success=" . urlencode("Entry deleted."));
         exit;
     }
+
+    /* ---------- RESERVATIONS ---------- */
+    if ($action === 'update_reservation') {
+        $stmt = $pdo->prepare("UPDATE reservations SET status=? WHERE reservation_id=?");
+        $stmt->execute([trim($_POST['status']), (int)$_POST['reservation_id']]);
+        header("Location: index.php#section-reservations");
+        exit;
+    }
 }
 ?>
 <!DOCTYPE html>
@@ -208,6 +216,7 @@ if ($action === 'delete_product') {
     <a href="#" class="sidebar-link" data-target="section-attendance">Attendance</a>
     <a href="#" class="sidebar-link" data-target="section-payroll">Payroll</a>
     <a href="#" class="sidebar-link" data-target="section-products">Product</a>
+    <a href="#" class="sidebar-link" data-target="section-reservations">Reservations</a>
     <a href="#" class="sidebar-link" data-target="section-archived">Archived</a>
   </nav>
 </aside>
@@ -487,7 +496,6 @@ if ($action === 'delete_product') {
   <div class="section" id="section-payroll" style="display:none;">
     <div class="section-head">
       <h2>Payroll</h2>
-      <a href="payroll/payroll.php">+ Add Payroll</a>
     </div>
     <div class="search-wrap" style="display:flex; justify-content:flex-end; margin-bottom:15px;">
       <select id="payroll-month-filter" onchange="filterPayrollTable()" style="padding: 8px 12px; border-radius: 6px; border: 1px solid #ccc; font-size: 14px; cursor: pointer; outline: none; background: white; min-width: 200px;">
@@ -624,6 +632,69 @@ if ($action === 'delete_product') {
       </table>
     </div>
   </div>
+
+  <!-- ============================================================
+       RESERVATIONS TABLE
+  ============================================================ -->
+  <div class="section" id="section-reservations" style="display:none;">
+    <div class="section-head">
+      <h2>Reservations</h2>
+      <a href="store/" target="_blank">View Store</a>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Customer</th>
+            <th>Phone</th>
+            <th>Pickup Date</th>
+            <th>Total Amount</th>
+            <th>Status</th>
+            <th class="actions-col">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+        <?php
+          $rows = $pdo->query("SELECT * FROM reservations ORDER BY created_at DESC")->fetchAll();
+          if ($rows):
+            foreach ($rows as $r):
+              $badgeClass = '';
+              if ($r['status'] == 'Pending') $badgeClass = 'background:#fef3c7;color:#92400e;';
+              if ($r['status'] == 'Confirmed') $badgeClass = 'background:#dbeafe;color:#1e40af;';
+              if ($r['status'] == 'Completed') $badgeClass = 'background:#d1fae5;color:#065f46;';
+              if ($r['status'] == 'Cancelled') $badgeClass = 'background:#fee2e2;color:#b91c1c;';
+        ?>
+          <tr>
+            <td>#<?= str_pad($r['reservation_id'], 5, '0', STR_PAD_LEFT) ?></td>
+            <td><?= htmlspecialchars($r['customer_name']) ?></td>
+            <td><?= htmlspecialchars($r['customer_phone']) ?></td>
+            <td><?= htmlspecialchars($r['pickup_date']) ?></td>
+            <td style="font-weight:600;">₱<?= number_format($r['total_amount'], 2) ?></td>
+            <td><span style="<?= $badgeClass ?>padding:4px 8px;border-radius:12px;font-size:12px;font-weight:600;"><?= $r['status'] ?></span></td>
+            <td>
+              <div class="actions-cell">
+                <form method="POST" style="display:inline;">
+                  <input type="hidden" name="_action" value="update_reservation">
+                  <input type="hidden" name="reservation_id" value="<?= $r['reservation_id'] ?>">
+                  <select name="status" onchange="this.form.submit()" style="padding:4px;border-radius:4px;border:1px solid #ccc;font-size:12px;cursor:pointer;">
+                    <option value="Pending" <?= $r['status']=='Pending'?'selected':'' ?>>Pending</option>
+                    <option value="Confirmed" <?= $r['status']=='Confirmed'?'selected':'' ?>>Confirmed</option>
+                    <option value="Completed" <?= $r['status']=='Completed'?'selected':'' ?>>Completed</option>
+                    <option value="Cancelled" <?= $r['status']=='Cancelled'?'selected':'' ?>>Cancelled</option>
+                  </select>
+                </form>
+              </div>
+            </td>
+          </tr>
+        <?php endforeach; else: ?>
+          <tr class="empty"><td colspan="7">No reservations found.</td></tr>
+        <?php endif; ?>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
 </main> <!-- /.main-content -->
 </div> <!-- /.dashboard-layout -->
 
@@ -665,11 +736,43 @@ if ($action === 'delete_product') {
   .payslip-print-btn { background: #4f46e5; color: #fff; border: none; padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; font-family: inherit; }
   .payslip-print-btn:hover { background: #4338ca; transform: translateY(-1px); }
   @media print {
-    body * { visibility: hidden; }
-    #modalPayslip, #modalPayslip * { visibility: visible; }
-    #modalPayslip { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #fff; z-index: 9999; }
-    #modalPayslip .modal-close, #modalPayslip .payslip-print-btn { display: none !important; }
+    /* Hide everything on the page */
+    body > *:not(#modalPayslip) { display: none !important; }
+    header, .dashboard-layout, .sidebar, .main-content { display: none !important; }
+
+    /* Reset modal overlay to be a normal block, not a fixed overlay */
+    #modalPayslip {
+      display: block !important;
+      position: static !important;
+      width: 100% !important;
+      height: auto !important;
+      background: #fff !important;
+      overflow: visible !important;
+      padding: 0 !important;
+      margin: 0 !important;
+    }
+
+    /* Reset the inner modal box */
+    #modalPayslip .modal {
+      position: static !important;
+      width: 100% !important;
+      max-width: 100% !important;
+      height: auto !important;
+      box-shadow: none !important;
+      border: none !important;
+      border-radius: 0 !important;
+      margin: 0 !important;
+      overflow: visible !important;
+    }
+
+    /* Hide close button and print button */
+    #modalPayslip .modal-close,
+    #modalPayslip .payslip-print-btn,
+    #modalPayslip select { display: none !important; }
+
+    /* Let content flow naturally */
     .payslip-body { max-height: none !important; overflow: visible !important; }
+    .payslip-header { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   }
 </style>
 <div class="modal-overlay" id="modalPayslip">
@@ -712,9 +815,9 @@ if ($action === 'delete_product') {
         <div class="info-item"><label>Email</label><span id="prof-email">—</span></div>
         <div class="info-item"><label>Phone</label><span id="prof-phone">—</span></div>
         <div class="info-item"><label>Gender</label><span id="prof-gender">—</span></div>
-        <div class="info-item"><label>Date of Birth</label><span id="prof-dob">—</span></div>
-        <div class="info-item"><label>Hire Date</label><span id="prof-hire">—</span></div>
-        <div class="info-item"><label>Address</label><span id="prof-address">—</span></div>
+        <div class="info-item"><label>Da of Birth</label><span id="prof-dob">—</span></div>
+        <div class="info-item"><label> </label><span id="prof-hire">—</span></div>
+        <div class="info-item"><label></label><span id="prof-address">—</span></div>
       </div>
     </div>
 
@@ -1452,9 +1555,9 @@ if ($action === 'delete_product') {
     document.getElementById('prof-att-body').innerHTML = attHtml;
   }
 
-  function openEmpProfile(empId) {
+  function setupProfileData(empId) {
     const emp = empData[empId];
-    if (!emp) return;
+    if (!emp) return null;
 
     document.querySelectorAll('.att-quick-emp-id').forEach(el => el.value = empId);
 
@@ -1474,14 +1577,26 @@ if ($action === 'delete_product') {
     document.getElementById('prof-hire').textContent    = emp.hire_date || '—';
     document.getElementById('prof-address').textContent = emp.address || '—';
 
-    // Attendance tab
     renderAttendanceTab(empId);
+    return emp;
+  }
+
+  function showAllTabs() {
+    const tabs = document.querySelectorAll('.profile-tab');
+    tabs.forEach(t => t.style.display = '');
+  }
+
+  function openEmpProfile(empId) {
+    const emp = setupProfileData(empId);
+    if (!emp) return;
+
+    // Show all tabs (Info, Attendance, Payslip)
+    showAllTabs();
 
     // Payroll tab
     const pays = payData[empId] || [];
     let payHtml = '';
 
-    // Add "View Full Payslip" button at top
     const now2 = new Date();
     const curMonth = now2.getFullYear() + '-' + String(now2.getMonth() + 1).padStart(2, '0');
     payHtml += `<div style="display:flex;justify-content:flex-end;margin-bottom:10px;">
@@ -1508,8 +1623,22 @@ if ($action === 'delete_product') {
     }
     document.getElementById('prof-pay-body').innerHTML = payHtml;
 
-    // Reset to info tab
     switchProfileTab('tab-info');
+    openModal('modalEmpProfile');
+  }
+
+  function openAttendanceProfile(empId) {
+    const emp = setupProfileData(empId);
+    if (!emp) return;
+
+    // Hide Info and Payslip tabs — only show Attendance
+    const tabs = document.querySelectorAll('.profile-tab');
+    tabs.forEach((t, i) => {
+      // index 0 = Info, 1 = Attendance, 2 = Payslip
+      t.style.display = (i === 1) ? '' : 'none';
+    });
+
+    switchProfileTab('tab-attendance');
     openModal('modalEmpProfile');
   }
 
@@ -1573,7 +1702,7 @@ if ($action === 'delete_product') {
        const lateAbs = Math.floor(late / 3);
        const totalAbs = absent + lateAbs;
        
-       html += `<tr class="clickable-row" onclick="openEmpProfile(${empId})">
+       html += `<tr class="clickable-row" onclick="openAttendanceProfile(${empId})">
          <td>
             <div style="display: flex; align-items: center; gap: 12px;">
                 ${emp.profile_picture ? `<img src="uploads/${emp.profile_picture}" style="width:32px; height:32px; border-radius:50%; object-fit:cover;">` : `<div style="width:32px; height:32px; border-radius:50%; background:#e2e8f0; display:flex; align-items:center; justify-content:center;"></div>`}
@@ -1645,10 +1774,12 @@ if ($action === 'delete_product') {
     }
   }
 
+
+
   // On page load, check URL hash or default to employees
   window.addEventListener('DOMContentLoaded', () => {
     const hash = window.location.hash.replace('#', '');
-    const validTargets = ['section-employees','section-archived','section-products','section-payroll','section-deductions','section-attendance'];
+    const validTargets = ['section-employees','section-archived','section-products','section-payroll','section-deductions','section-attendance','section-reservations'];
     const target = validTargets.includes(hash) ? hash : 'section-employees';
 
     sidebarLinks.forEach(l => {

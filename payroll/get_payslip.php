@@ -108,7 +108,39 @@ elseif ($employee_id > 0 && !empty($month)) {
         $empName = $emp['first_name'] . ' ' . $emp['last_name'];
         $empPic  = $emp['profile_picture'];
         $empPos  = $emp['position_title'];
-        $savedPay = null; // will compute live
+
+        // Check if a saved payroll record exists for this employee+month
+        $savedPay = null;
+        $payCheck = $pdo->prepare("
+            SELECT payroll_id, gross_pay, net_pay,
+                   sss_contribution, philhealth_contribution, pagibig_contribution,
+                   attendance_deduction, total_deductions, payment_date,
+                   is_paid, paid_date
+            FROM payroll
+            WHERE employee_id = :eid
+              AND pay_period_start = :ps AND pay_period_end = :pe
+            LIMIT 1
+        ");
+        $payCheck->execute([':eid' => $employee_id, ':ps' => $periodStart, ':pe' => $periodEnd]);
+        $existingPay = $payCheck->fetch(PDO::FETCH_ASSOC);
+
+        if ($existingPay) {
+            $savedPay = [
+                'gross_pay'       => (float)$existingPay['gross_pay'],
+                'sss'             => (float)$existingPay['sss_contribution'],
+                'philhealth'      => (float)$existingPay['philhealth_contribution'],
+                'pagibig'         => (float)$existingPay['pagibig_contribution'],
+                'attendance_ded'  => (float)$existingPay['attendance_deduction'],
+                'total_deductions'=> (float)$existingPay['total_deductions'],
+                'net_pay'         => (float)$existingPay['net_pay'],
+                'payment_date'    => $existingPay['payment_date'],
+                'payroll_id'      => $existingPay['payroll_id'],
+                'is_saved'        => true,
+                'is_paid'         => (int)$existingPay['is_paid'],
+                'paid_date'       => $existingPay['paid_date'],
+            ];
+        }
+        // If no saved record, $savedPay stays null → will compute live
 
     } catch (PDOException $e) {
         echo json_encode(['error' => 'DB error: ' . $e->getMessage()]);
